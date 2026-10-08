@@ -98,6 +98,8 @@ st.markdown("""
 <style>
 .block-container { padding-top: 1.6rem; max-width: 1100px; }
 #MainMenu, footer { visibility: hidden; }
+[data-testid="stHeader"], [data-testid="stToolbar"] { display: none; }
+.stApp { background: #F4F6F9; color-scheme: light; }
 
 /* Top banner */
 .top-banner { background: #12355B; border-radius: 10px; padding: 22px 28px; margin-bottom: 18px; }
@@ -105,13 +107,17 @@ st.markdown("""
 .top-sub { color: #B9C8DA; font-size: 14px; margin: 6px 0 0 0; }
 
 /* Critical alert */
-.alert-box { background: #FBE3E3; border-left: 5px solid #D64545; color: #7A1D1D;
-             padding: 14px 18px; border-radius: 8px; margin-bottom: 18px; font-size: 15px; }
+.alert-box { position: relative; overflow: hidden; background: #FBE3E3; color: #7A1D1D;
+             padding: 14px 18px 14px 26px; border-radius: 8px; margin-bottom: 18px; font-size: 15px; }
+.alert-box::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+                     width: 6px; background: #D64545; }
 
 /* Four summary cards */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
 .kpi { background: #FFFFFF; border-radius: 10px; padding: 16px 18px;
        box-shadow: 0 1px 3px rgba(18, 53, 91, 0.10); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+       margin-right: 8px; vertical-align: middle; }
 .kpi-label { color: #5B6B7F; font-size: 13px; font-weight: 600; }
 .kpi-value { color: #1B2A3A; font-size: 34px; font-weight: 700; line-height: 1.2; }
 
@@ -139,8 +145,6 @@ table.bins tr:last-child td { border-bottom: none; }
 .badge-open   { background: #E1ECFA; color: #1F5AA6; }
 .badge-closed { background: #EDF0F4; color: #4A5A6C; }
 
-.footnote { color: #5B6B7F; font-size: 13px; margin: 12px 0 6px 10px; }
-
 /* On phones, show the summary cards two per row */
 @media (max-width: 700px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
 </style>
@@ -160,7 +164,7 @@ def show_dashboard():
     for b in bins:
         b["status"] = get_bin_status(b["fill"])
 
-    # Fullest bin first
+    # Highest fill first
     bins = sorted(bins, key=lambda b: b["fill"], reverse=True)
 
     # Count bins in each state
@@ -194,9 +198,9 @@ def show_dashboard():
 
     # --- Four summary cards ---
     def kpi_card(label, value, color):
-        """Build the HTML for one summary card. 'color' is the colour of its left edge."""
-        return ('<div class="kpi" style="border-left: 5px solid ' + color + ';">'
-                '<div class="kpi-label">' + label + '</div>'
+        """Build the HTML for one summary card. 'color' is the colour of the small dot."""
+        return ('<div class="kpi">'
+            '<div class="kpi-label"><span class="dot" style="background:' + color + ';"></span>' + label + '</div>'
                 '<div class="kpi-value">' + str(value) + '</div></div>')
 
     st.markdown(
@@ -228,13 +232,11 @@ def show_dashboard():
 
     st.markdown(
         '<div class="table-wrap">'
-        '<div class="section-title">All bins, fullest first</div>'
+        '<div class="section-title">All bins, highest fill first</div>'
         '<table class="bins">'
         '<tr><th>Bin ID</th><th>Location</th><th>Fill level</th><th>Status</th><th>Lid</th></tr>'
         + rows_html +
         '</table>'
-        '<div class="footnote">Simulated data: a new random reading is made every minute. '
-        'BIN-001 will switch to live ESP32 data in a later phase.</div>'
         '</div>',
         unsafe_allow_html=True,
     )
