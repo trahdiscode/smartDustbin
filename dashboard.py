@@ -85,9 +85,9 @@ def get_bin_status(fill):
 
 # How each status is shown on screen: a word, a bar colour, and a badge style.
 STATUS_STYLE = {
-    "GREEN":  {"label": "Normal",     "color": "#2E9E5B", "badge": "badge-green"},
-    "YELLOW": {"label": "Filling up", "color": "#E0A100", "badge": "badge-yellow"},
-    "RED":    {"label": "Critical",   "color": "#D64545", "badge": "badge-red"},
+    "GREEN":  {"label": "Normal",     "color": "#3DBE7A", "badge": "badge-green"},
+    "YELLOW": {"label": "Filling up", "color": "#F0B429", "badge": "badge-yellow"},
+    "RED":    {"label": "Critical",   "color": "#F0605D", "badge": "badge-red"},
 }
 
 
@@ -99,51 +99,50 @@ st.markdown("""
 .block-container { padding-top: 1.6rem; max-width: 1100px; }
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stHeader"], [data-testid="stToolbar"] { display: none; }
-.stApp { background: #F4F6F9; color-scheme: light; }
+.stApp { background: #0D1620; color-scheme: dark; }
 
 /* Top banner */
-.top-banner { background: #12355B; border-radius: 10px; padding: 22px 28px; margin-bottom: 18px; }
+.top-banner { background: #174A78; border-radius: 10px; padding: 22px 28px; margin-bottom: 18px; }
 .top-title { color: #FFFFFF; font-size: 30px; font-weight: 700; line-height: 1.2; margin: 0; }
-.top-sub { color: #B9C8DA; font-size: 14px; margin: 6px 0 0 0; }
+.top-sub { color: #C3D5E8; font-size: 14px; margin: 6px 0 0 0; }
 
 /* Critical alert */
-.alert-box { position: relative; overflow: hidden; background: #FBE3E3; color: #7A1D1D;
+.alert-box { position: relative; overflow: hidden; background: #3A1A1E; color: #FFC9C7;
              padding: 14px 18px 14px 26px; border-radius: 8px; margin-bottom: 18px; font-size: 15px; }
 .alert-box::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-                     width: 6px; background: #D64545; }
+                     width: 6px; background: #F0605D; }
 
 /* Four summary cards */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
-.kpi { background: #FFFFFF; border-radius: 10px; padding: 16px 18px;
-       box-shadow: 0 1px 3px rgba(18, 53, 91, 0.10); }
+.kpi { background: #15222E; border: 1px solid #243545; border-radius: 10px; padding: 16px 18px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
        margin-right: 8px; vertical-align: middle; }
-.kpi-label { color: #5B6B7F; font-size: 13px; font-weight: 600; }
-.kpi-value { color: #1B2A3A; font-size: 34px; font-weight: 700; line-height: 1.2; }
+.kpi-label { color: #93A5B5; font-size: 13px; font-weight: 600; }
+.kpi-value { color: #E6EEF5; font-size: 34px; font-weight: 700; line-height: 1.2; }
 
 /* Bin table */
-.section-title { color: #1B2A3A; font-size: 18px; font-weight: 700; margin: 16px 0 4px 10px; }
-.table-wrap { background: #FFFFFF; border-radius: 10px; padding: 6px 18px 10px 18px;
-              box-shadow: 0 1px 3px rgba(18, 53, 91, 0.10); overflow-x: auto; }
+.section-title { color: #E6EEF5; font-size: 18px; font-weight: 700; margin: 16px 0 4px 10px; }
+.table-wrap { background: #15222E; border: 1px solid #243545; border-radius: 10px;
+              padding: 6px 18px 10px 18px; overflow-x: auto; }
 table.bins { width: 100%; border-collapse: collapse; font-size: 15px; }
-table.bins th { text-align: left; color: #5B6B7F; font-size: 13px; font-weight: 600;
-                padding: 12px 10px; border-bottom: 2px solid #E3E8EF; }
-table.bins td { padding: 14px 10px; border-bottom: 1px solid #EEF1F5; color: #1B2A3A;
+table.bins th { text-align: left; color: #93A5B5; font-size: 13px; font-weight: 600;
+                padding: 12px 10px; border-bottom: 2px solid #243545; }
+table.bins td { padding: 14px 10px; border-bottom: 1px solid #1F3040; color: #E6EEF5;
                 vertical-align: middle; white-space: nowrap; }
 table.bins tr:last-child td { border-bottom: none; }
 
 /* Fill bar */
-.bar-bg { display: inline-block; width: 150px; height: 10px; background: #E8ECF2;
+.bar-bg { display: inline-block; width: 150px; height: 10px; background: #2A3C4D;
           border-radius: 6px; overflow: hidden; vertical-align: middle; margin-right: 10px; }
 .bar-fill { height: 100%; border-radius: 6px; }
 
 /* Small coloured labels (badges) */
 .badge { display: inline-block; padding: 3px 11px; border-radius: 99px; font-size: 13px; font-weight: 600; }
-.badge-green  { background: #E3F5EA; color: #1E7A46; }
-.badge-yellow { background: #FFF3CD; color: #8A6100; }
-.badge-red    { background: #FBE3E3; color: #B02A2A; }
-.badge-open   { background: #E1ECFA; color: #1F5AA6; }
-.badge-closed { background: #EDF0F4; color: #4A5A6C; }
+.badge-green  { background: #153A28; color: #6FDDA0; }
+.badge-yellow { background: #3E3314; color: #F5CD6A; }
+.badge-red    { background: #43191C; color: #FF9C98; }
+.badge-open   { background: #162E4D; color: #8DB8F2; }
+.badge-closed { background: #223140; color: #A8B7C6; }
 
 /* On phones, show the summary cards two per row */
 @media (max-width: 700px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
@@ -205,7 +204,7 @@ def show_dashboard():
 
     st.markdown(
         '<div class="kpi-row">'
-        + kpi_card("Total bins", len(bins), "#12355B")
+        + kpi_card("Total bins", len(bins), "#5B9BD5")
         + kpi_card("Normal (under 50%)", green_count, STATUS_STYLE["GREEN"]["color"])
         + kpi_card("Filling up (50 to 79%)", yellow_count, STATUS_STYLE["YELLOW"]["color"])
         + kpi_card("Critical (80% and above)", len(red_bins), STATUS_STYLE["RED"]["color"])
