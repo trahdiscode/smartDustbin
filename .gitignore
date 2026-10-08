@@ -1,0 +1,8 @@
+# Secrets (API keys, passwords) - never upload these
+.streamlit/secrets.toml
+
+# Python junk
+__pycache__/
+*.pyc
+.venv/
+venv/
