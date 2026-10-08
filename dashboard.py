@@ -59,8 +59,8 @@ st.markdown("""
 
 /* Top banner */
 .top-banner { background: #12355B; border-radius: 10px; padding: 22px 28px; margin-bottom: 18px; }
-.top-title { color: #FFFFFF; font-size: 26px; font-weight: 700; margin: 0; }
-.top-sub { color: #B9C8DA; font-size: 14px; margin: 4px 0 0 0; }
+.top-title { color: #FFFFFF; font-size: 30px; font-weight: 700; line-height: 1.2; margin: 0; }
+.top-sub { color: #B9C8DA; font-size: 14px; margin: 6px 0 0 0; }
 
 /* Critical alert */
 .alert-box { background: #FBE3E3; border-left: 5px solid #D64545; color: #7A1D1D;
@@ -74,7 +74,7 @@ st.markdown("""
 .kpi-value { color: #1B2A3A; font-size: 34px; font-weight: 700; line-height: 1.2; }
 
 /* Bin table */
-.section-title { color: #1B2A3A; font-size: 18px; font-weight: 700; margin: 6px 0 10px 0; }
+.section-title { color: #1B2A3A; font-size: 18px; font-weight: 700; margin: 16px 0 4px 10px; }
 .table-wrap { background: #FFFFFF; border-radius: 10px; padding: 6px 18px 10px 18px;
               box-shadow: 0 1px 3px rgba(18, 53, 91, 0.10); overflow-x: auto; }
 table.bins { width: 100%; border-collapse: collapse; font-size: 15px; }
@@ -97,7 +97,7 @@ table.bins tr:last-child td { border-bottom: none; }
 .badge-open   { background: #E1ECFA; color: #1F5AA6; }
 .badge-closed { background: #EDF0F4; color: #4A5A6C; }
 
-.footnote { color: #5B6B7F; font-size: 13px; margin-top: 14px; }
+.footnote { color: #5B6B7F; font-size: 13px; margin: 12px 0 6px 10px; }
 
 /* On phones, show the summary cards two per row */
 @media (max-width: 700px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
@@ -131,8 +131,8 @@ red_bins = [b for b in bins if b["status"] == "RED"]
 now_text = datetime.now().strftime("%d %b %Y, %H:%M:%S")
 st.markdown(
     '<div class="top-banner">'
-    '<p class="top-title">Smart Dustbin Monitoring</p>'
-    '<p class="top-sub">Fill level, status and lid state of every bin. Page loaded ' + now_text + '</p>'
+    '<div class="top-title">Smart Dustbin Monitoring</div>'
+    '<div class="top-sub">Fill level, status and lid state of every bin. Page loaded ' + now_text + '</div>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -181,17 +181,14 @@ for b in bins:
     )
 
 st.markdown(
+    '<div class="table-wrap">'
     '<div class="section-title">All bins, fullest first</div>'
-    '<div class="table-wrap"><table class="bins">'
+    '<table class="bins">'
     '<tr><th>Bin ID</th><th>Location</th><th>Fill level</th><th>Status</th><th>Lid</th></tr>'
     + rows_html +
-    '</table></div>',
-    unsafe_allow_html=True,
-)
-
-# --- Honest note about the data ---
-st.markdown(
+    '</table>'
     '<div class="footnote">Showing sample data. Live readings from the ESP32 will '
-    'replace this in a later phase.</div>',
+    'replace this in a later phase.</div>'
+    '</div>',
     unsafe_allow_html=True,
 )
