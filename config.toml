@@ -4,7 +4,7 @@
 [theme]
 base = "dark"
 primaryColor = "#5B9BD5"            # light blue (main accent)
-backgroundColor = "#0D1620"         # page background (very dark blue)
+backgroundColor = "#000000"         # page background (pure black)
 secondaryBackgroundColor = "#15222E"
 textColor = "#E6EEF5"               # soft white text
 font = "sans serif"
