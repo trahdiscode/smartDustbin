@@ -7,12 +7,15 @@
 import random
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="Smart Dustbin Monitoring", page_icon="🗑️", layout="wide")
+
+# India Standard Time = UTC + 5 hours 30 minutes (India has no daylight saving, so this never changes).
+IST = timezone(timedelta(hours=5, minutes=30))
 
 # How often (in seconds) the page checks for new data.
 # New readings are still created only once per minute.
@@ -99,7 +102,7 @@ st.markdown("""
 .block-container { padding-top: 1.6rem; max-width: 1100px; }
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stHeader"], [data-testid="stToolbar"] { display: none; }
-.stApp { background: #0D1620; color-scheme: dark; }
+.stApp { background: #000000; color-scheme: dark; }
 
 /* Top banner */
 .top-banner { background: #174A78; border-radius: 10px; padding: 22px 28px; margin-bottom: 18px; }
@@ -177,7 +180,8 @@ def show_dashboard():
     # =====================================================================
 
     # --- Top banner ---
-    updated_text = updated_at.strftime("%d %b %Y, %H:%M:%S") + " UTC"
+    # The simulator stores time in UTC, so we convert it to IST for display.
+    updated_text = updated_at.astimezone(IST).strftime("%d %b %Y, %H:%M:%S") + " IST"
     st.markdown(
         '<div class="top-banner">'
         '<div class="top-title">Smart Dustbin Monitoring</div>'
