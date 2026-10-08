@@ -2,9 +2,9 @@
 # Colours and font for the whole app. Safe to upload to GitHub (no secrets here).
 
 [theme]
-base = "light"
-primaryColor = "#12355B"            # navy (main accent)
-backgroundColor = "#F4F6F9"         # page background (light grey-blue)
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1B2A3A"               # dark blue-grey text
+base = "dark"
+primaryColor = "#5B9BD5"            # light blue (main accent)
+backgroundColor = "#0D1620"         # page background (very dark blue)
+secondaryBackgroundColor = "#15222E"
+textColor = "#E6EEF5"               # soft white text
 font = "sans serif"
