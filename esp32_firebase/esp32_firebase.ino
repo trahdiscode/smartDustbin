@@ -25,9 +25,11 @@ String lidStatus = "CLOSED";
 String binStatus = "NORMAL";
 
 unsigned long lastFirebasePush = 0;
-bool stateChanged = false;
 
-// Function to push live telemetry to Firebase
+// Persistent HTTP client for sub-100ms updates
+WiFiClientSecure client;
+HTTPClient http;
+
 void sendToFirebase(int fill, int dist, String lid, String status) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println(F("[Wi-Fi] Reconnecting..."));
@@ -35,13 +37,10 @@ void sendToFirebase(int fill, int dist, String lid, String status) {
     return;
   }
 
-  WiFiClientSecure client;
-  client.setInsecure(); // Allows fast HTTPS without needing root certificates
-
-  HTTPClient http;
   String endpoint = String(FIREBASE_HOST) + "/bins/BIN-001.json";
 
   http.begin(client, endpoint);
+  http.setReuse(true); // Keeps SSL session open for instant low-latency pushes
   http.addHeader("Content-Type", "application/json");
 
   // Construct JSON payload
@@ -52,29 +51,30 @@ void sendToFirebase(int fill, int dist, String lid, String status) {
   jsonPayload += "\"status\":\"" + status + "\"";
   jsonPayload += "}";
 
-  // PATCH updates the record in real time
+  // Send PATCH
   int httpResponseCode = http.PATCH(jsonPayload);
 
   if (httpResponseCode > 0) {
     Serial.printf("[Firebase] 🟢 Sent! Code: %d -> %s\n", httpResponseCode, jsonPayload.c_str());
   } else {
-    Serial.printf("[Firebase] 🔴 Failed, error code: %d\n", httpResponseCode);
+    Serial.printf("[Firebase] 🔴 Error: %d\n", httpResponseCode);
+    http.end(); // Reset on error
   }
-
-  http.end();
 }
 
 void setup() {
   Serial.begin(115200);
 
-  // Serial2 from Arduino Uno (GPIO 16) at 9600 baud
+  // Serial2 from Arduino Uno at 9600 baud with ultra-short 15ms timeout
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  Serial2.setTimeout(15); // Zero serial read lag
+
+  client.setInsecure(); // Fast HTTPS handshake
 
   Serial.println(F("\n=================================="));
-  Serial.println(F("  ESP32 -> Firebase Cloud Bridge"));
+  Serial.println(F("  ESP32 Real-Time Cloud Streamer"));
   Serial.println(F("=================================="));
 
-  // Connect to Mobile Hotspot
   Serial.print(F("Connecting to Hotspot: "));
   Serial.println(WIFI_SSID);
 
@@ -83,7 +83,7 @@ void setup() {
 
   int timeout = 0;
   while (WiFi.status() != WL_CONNECTED && timeout < 30) {
-    delay(500);
+    delay(400);
     Serial.print(".");
     timeout++;
   }
@@ -92,12 +92,17 @@ void setup() {
     Serial.println(F("\n[Wi-Fi] Connected successfully!"));
     Serial.print(F("[Wi-Fi] IP Address: "));
     Serial.println(WiFi.localIP());
+
+    // Send initial boot telemetry
+    sendToFirebase(fillPercent, trashDistance, lidStatus, binStatus);
   } else {
-    Serial.println(F("\n[Wi-Fi] Connection failed. Please check if Mobile Hotspot is turned ON!"));
+    Serial.println(F("\n[Wi-Fi] Connection failed. Please check Hotspot!"));
   }
 }
 
 void loop() {
+  bool stateChanged = false;
+
   // Read incoming packet from Arduino UNO: "DATA,fill,dist,lidState,status"
   if (Serial2.available()) {
     String line = Serial2.readStringUntil('\n');
@@ -115,8 +120,8 @@ void loop() {
         String newLid = line.substring(c3 + 1, c4);
         String newStatus = line.substring(c4 + 1);
 
-        // If the lid opens/closes or fill level changes, flag for immediate update
-        if (newLid != lidStatus || newFill != fillPercent) {
+        // INSTANT TRIGGER: If lid opened/closed or fill changed, push immediately!
+        if (newLid != lidStatus || newFill != fillPercent || abs(newDist - trashDistance) >= 2) {
           stateChanged = true;
         }
 
@@ -128,14 +133,10 @@ void loop() {
     }
   }
 
-  // Push to Firebase:
-  // 1. Instantly if state changed (e.g. lid opened/closed)
-  // 2. OR at least once every 3 seconds as a heartbeat
+  // Push instantly on state change, or every 3 seconds as a heartbeat
   unsigned long now = millis();
   if (stateChanged || (now - lastFirebasePush >= 3000)) {
     lastFirebasePush = now;
-    stateChanged = false;
-
     sendToFirebase(fillPercent, trashDistance, lidStatus, binStatus);
   }
 }
