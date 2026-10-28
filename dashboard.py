@@ -1,84 +1,104 @@
 # dashboard.py
-# Smart Dustbin dashboard - version 4 (simulated data, new random reading every minute)
-#
-# All bins are SIMULATED for now. A new random reading is created once per minute.
-# Later, BIN-001 will switch to real data from the ESP32 and database.
+# Smart Dustbin dashboard with Firebase Realtime Database Integration
+# BIN-001 is LIVE from hardware (ESP32 -> Firebase).
+# BIN-002 through BIN-005 are simulated for a complete multi-bin demonstration.
 
 import random
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-
+import requests
 import streamlit as st
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="Smart Dustbin Monitoring", page_icon="🗑️", layout="wide")
 
-# India Standard Time = UTC + 5 hours 30 minutes (India has no daylight saving, so this never changes).
+# India Standard Time = UTC + 5:30
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# How often (in seconds) the page checks for new data.
-# New readings are still created only once per minute.
-REFRESH_SECONDS = 10
+# Refresh rate for live dashboard (seconds)
+REFRESH_SECONDS = 3
+
+# =====================================================================
+# FIREBASE REALTIME DATABASE CONFIGURATION
+# =====================================================================
+FIREBASE_URL = "https://parkos1-default-rtdb.firebaseio.com"
 
 
 # =====================================================================
-# 1. DATA  (a simulator that makes a new random reading every minute)
+# 1. DATA (Live Firebase for BIN-001 + Simulator for others)
 # =====================================================================
-
-# Where each bin starts. After that, the fill levels change by themselves.
 START_BINS = [
-    {"bin_id": "BIN-001", "location": "Block A, Ground floor", "fill": 62, "lid": "CLOSED"},
-    {"bin_id": "BIN-002", "location": "Block A, First floor",  "fill": 18, "lid": "CLOSED"},
-    {"bin_id": "BIN-003", "location": "Canteen entrance",      "fill": 87, "lid": "CLOSED"},
-    {"bin_id": "BIN-004", "location": "Library",               "fill": 45, "lid": "CLOSED"},
-    {"bin_id": "BIN-005", "location": "Hostel gate",           "fill": 91, "lid": "OPEN"},
+    {"bin_id": "BIN-001", "location": "Main Entrance (Hardware)", "fill": 0, "lid": "CLOSED", "source": "LIVE"},
+    {"bin_id": "BIN-002", "location": "Block A, First floor",      "fill": 18, "lid": "CLOSED", "source": "SIMULATED"},
+    {"bin_id": "BIN-003", "location": "Canteen entrance",          "fill": 87, "lid": "CLOSED", "source": "SIMULATED"},
+    {"bin_id": "BIN-004", "location": "Library",                   "fill": 45, "lid": "CLOSED", "source": "SIMULATED"},
+    {"bin_id": "BIN-005", "location": "Hostel gate",               "fill": 91, "lid": "OPEN",   "source": "SIMULATED"},
 ]
 
 @st.cache_resource
 def get_simulator():
-    """Create the simulator ONCE and share it with everyone who opens the page.
-    (Without this, every visitor would see different random numbers.)"""
     return {
-        "lock": threading.Lock(),                # stops two visitors changing data at the same moment
-        "last_minute": int(time.time() // 60),   # which minute we last made a reading for
+        "lock": threading.Lock(),
+        "last_minute": int(time.time() // 60),
         "updated_at": datetime.now(timezone.utc),
         "bins": [dict(b) for b in START_BINS],
     }
 
 def make_next_reading(bin_record):
-    """Change ONE bin by one minute's worth of random filling."""
-    # Garbage only goes UP: add 1 to 5 percent.
+    """Simulates fill progression for virtual bins only."""
     bin_record["fill"] = bin_record["fill"] + random.randint(1, 5)
-    # If the bin is full, pretend someone emptied it (back to 0 to 5 percent).
     if bin_record["fill"] >= 100:
         bin_record["fill"] = random.randint(0, 5)
-    # The lid is only open for a few seconds in real life, so 1 reading in 10.
     bin_record["lid"] = "OPEN" if random.random() < 0.10 else "CLOSED"
 
+def fetch_live_bin001():
+    """Fetch real-time hardware telemetry from Firebase REST API."""
+    if not FIREBASE_URL or "default-rtdb" in FIREBASE_URL:
+        # Default placeholder URL, return None to use simulator
+        return None
+    try:
+        url = FIREBASE_URL.rstrip('/') + "/bins/BIN-001.json"
+        res = requests.get(url, timeout=2.5)
+        if res.status_code == 200 and res.json():
+            return res.json()
+    except Exception as e:
+        # Fail gracefully without crashing the dashboard
+        pass
+    return None
+
 def load_bins():
-    """Return (list of bins, time of the last new reading).
-    RIGHT NOW: simulated. LATER: this will read real rows from Supabase."""
+    """Return (list of bins, updated_at timestamp)."""
     sim = get_simulator()
     with sim["lock"]:
         this_minute = int(time.time() // 60)
         minutes_passed = this_minute - sim["last_minute"]
         if minutes_passed > 0:
-            # Make one reading per minute that passed (at most 30, in case the app was asleep).
             for _ in range(min(minutes_passed, 30)):
                 for b in sim["bins"]:
-                    make_next_reading(b)
+                    if b["bin_id"] != "BIN-001":  # Only simulate virtual bins
+                        make_next_reading(b)
             sim["last_minute"] = this_minute
             sim["updated_at"] = datetime.now(timezone.utc)
-        # Return COPIES so the page cannot accidentally change the shared data.
-        return [dict(b) for b in sim["bins"]], sim["updated_at"]
+
+        bin_list = [dict(b) for b in sim["bins"]]
+
+        # OVERWRITE BIN-001 WITH LIVE FIREBASE DATA
+        live_data = fetch_live_bin001()
+        if live_data:
+            bin_list[0]["fill"] = int(live_data.get("fill", bin_list[0]["fill"]))
+            bin_list[0]["lid"] = str(live_data.get("lid", bin_list[0]["lid"])).upper()
+            bin_list[0]["source"] = "LIVE 🟢"
+        else:
+            bin_list[0]["source"] = "SIMULATED 🟡"
+
+        return bin_list, sim["updated_at"]
 
 
 # =====================================================================
-# 2. RULES  (same thresholds as the Arduino code)
+# 2. RULES
 # =====================================================================
 def get_bin_status(fill):
-    """Turn a fill percentage into GREEN, YELLOW or RED."""
     if fill < 50:
         return "GREEN"
     elif fill < 80:
@@ -86,7 +106,6 @@ def get_bin_status(fill):
     else:
         return "RED"
 
-# How each status is shown on screen: a word, a bar colour, and a badge style.
 STATUS_STYLE = {
     "GREEN":  {"label": "Normal",     "color": "#3DBE7A", "badge": "badge-green"},
     "YELLOW": {"label": "Filling up", "color": "#F0B429", "badge": "badge-yellow"},
@@ -95,7 +114,7 @@ STATUS_STYLE = {
 
 
 # =====================================================================
-# 3. LOOK  (CSS = the styling instructions for the page)
+# 3. STYLES
 # =====================================================================
 st.markdown("""
 <style>
@@ -115,7 +134,7 @@ st.markdown("""
 .alert-box::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
                      width: 6px; background: #F0605D; }
 
-/* Four summary cards */
+/* Summary cards */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
 .kpi { background: #15222E; border: 1px solid #243545; border-radius: 10px; padding: 16px 18px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
@@ -135,62 +154,52 @@ table.bins td { padding: 14px 10px; border-bottom: 1px solid #1F3040; color: #E6
 table.bins tr:last-child td { border-bottom: none; }
 
 /* Fill bar */
-.bar-bg { display: inline-block; width: 150px; height: 10px; background: #2A3C4D;
+.bar-bg { display: inline-block; width: 140px; height: 10px; background: #2A3C4D;
           border-radius: 6px; overflow: hidden; vertical-align: middle; margin-right: 10px; }
 .bar-fill { height: 100%; border-radius: 6px; }
 
-/* Small coloured labels (badges) */
+/* Badges */
 .badge { display: inline-block; padding: 3px 11px; border-radius: 99px; font-size: 13px; font-weight: 600; }
 .badge-green  { background: #153A28; color: #6FDDA0; }
 .badge-yellow { background: #3E3314; color: #F5CD6A; }
 .badge-red    { background: #43191C; color: #FF9C98; }
 .badge-open   { background: #162E4D; color: #8DB8F2; }
 .badge-closed { background: #223140; color: #A8B7C6; }
+.badge-live   { background: #064E3B; color: #34D399; border: 1px solid #059669; }
 
-/* On phones, show the summary cards two per row */
 @media (max-width: 700px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
 </style>
 """, unsafe_allow_html=True)
 
 
 # =====================================================================
-# 4 and 5. PREPARE THE NUMBERS AND DRAW THE PAGE
-# This function re-runs by itself every REFRESH_SECONDS, so the page
-# updates without you pressing refresh.
+# 4. DRAW THE LIVE PAGE
 # =====================================================================
 @st.fragment(run_every=REFRESH_SECONDS)
 def show_dashboard():
     bins, updated_at = load_bins()
 
-    # Add a status to every bin
     for b in bins:
         b["status"] = get_bin_status(b["fill"])
 
     # Highest fill first
     bins = sorted(bins, key=lambda b: b["fill"], reverse=True)
 
-    # Count bins in each state
     green_count = sum(1 for b in bins if b["status"] == "GREEN")
     yellow_count = sum(1 for b in bins if b["status"] == "YELLOW")
     red_bins = [b for b in bins if b["status"] == "RED"]
 
-
-    # =====================================================================
-    # 5. DRAW THE PAGE
-    # =====================================================================
-
-    # --- Top banner ---
-    # The simulator stores time in UTC, so we convert it to IST for display.
-    updated_text = updated_at.astimezone(IST).strftime("%d %b %Y, %H:%M:%S") + " IST"
+    # Top banner
+    updated_text = datetime.now(IST).strftime("%d %b %Y, %H:%M:%S") + " IST"
     st.markdown(
         '<div class="top-banner">'
-        '<div class="top-title">Smart Dustbin Monitoring</div>'
-        '<div class="top-sub">Fill level, status and lid state of every bin. Last reading ' + updated_text + '</div>'
+        '<div class="top-title">Smart Dustbin Monitoring (IoT Cloud)</div>'
+        '<div class="top-sub">Real-time Firebase telemetry &bull; Last synchronized at ' + updated_text + '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    # --- Critical alert (only if at least one bin is RED) ---
+    # Critical alert
     if red_bins:
         names = ", ".join(b["bin_id"] + " (" + b["location"] + ")" for b in red_bins)
         st.markdown(
@@ -199,31 +208,32 @@ def show_dashboard():
             unsafe_allow_html=True,
         )
 
-    # --- Four summary cards ---
+    # KPI summary cards
     def kpi_card(label, value, color):
-        """Build the HTML for one summary card. 'color' is the colour of the small dot."""
         return ('<div class="kpi">'
-            '<div class="kpi-label"><span class="dot" style="background:' + color + ';"></span>' + label + '</div>'
+                '<div class="kpi-label"><span class="dot" style="background:' + color + ';"></span>' + label + '</div>'
                 '<div class="kpi-value">' + str(value) + '</div></div>')
 
     st.markdown(
         '<div class="kpi-row">'
-        + kpi_card("Total bins", len(bins), "#5B9BD5")
-        + kpi_card("Normal (under 50%)", green_count, STATUS_STYLE["GREEN"]["color"])
-        + kpi_card("Filling up (50 to 79%)", yellow_count, STATUS_STYLE["YELLOW"]["color"])
-        + kpi_card("Critical (80% and above)", len(red_bins), STATUS_STYLE["RED"]["color"])
+        + kpi_card("Total Bins", len(bins), "#5B9BD5")
+        + kpi_card("Normal (< 50%)", green_count, STATUS_STYLE["GREEN"]["color"])
+        + kpi_card("Filling up (50-79%)", yellow_count, STATUS_STYLE["YELLOW"]["color"])
+        + kpi_card("Critical (>= 80%)", len(red_bins), STATUS_STYLE["RED"]["color"])
         + '</div>',
         unsafe_allow_html=True,
     )
 
-    # --- Table of all bins ---
+    # Table of all bins
     rows_html = ""
     for b in bins:
         style = STATUS_STYLE[b["status"]]
         lid_badge = "badge-open" if b["lid"] == "OPEN" else "badge-closed"
+        source_badge = '<span class="badge badge-live">HARDWARE</span>' if "LIVE" in b.get("source", "") else '<span class="badge badge-closed">VIRTUAL</span>'
+        
         rows_html += (
             '<tr>'
-            '<td><b>' + b["bin_id"] + '</b></td>'
+            '<td><b>' + b["bin_id"] + '</b> ' + source_badge + '</td>'
             '<td>' + b["location"] + '</td>'
             '<td><span class="bar-bg"><span class="bar-fill" style="display:block; width:'
             + str(b["fill"]) + '%; background:' + style["color"] + ';"></span></span>'
@@ -237,12 +247,11 @@ def show_dashboard():
         '<div class="table-wrap">'
         '<div class="section-title">All bins, highest fill first</div>'
         '<table class="bins">'
-        '<tr><th>Bin ID</th><th>Location</th><th>Fill level</th><th>Status</th><th>Lid</th></tr>'
+        '<tr><th>Bin ID</th><th>Location</th><th>Fill Level</th><th>Status</th><th>Lid</th></tr>'
         + rows_html +
         '</table>'
         '</div>',
         unsafe_allow_html=True,
     )
-
 
 show_dashboard()
