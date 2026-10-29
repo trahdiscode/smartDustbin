@@ -136,20 +136,14 @@ st.markdown("""
 .top-title { color: #FFFFFF; font-size: 28px; font-weight: 700; line-height: 1.2; margin: 0; }
 .top-sub { color: #C3D5E8; font-size: 14px; margin: 4px 0 0 0; }
 
-/* Multi-Hardware Grid */
-.hardware-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 22px;
-}
-
+/* Hero Cards */
 .hero-card {
     background: linear-gradient(145deg, #162B40, #0F1E2C);
     border: 2px solid #2B6CB0;
     border-radius: 12px;
     padding: 20px 22px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    margin-bottom: 14px;
 }
 .hero-card.card-bin2 {
     border-color: #3182CE;
@@ -157,14 +151,14 @@ st.markdown("""
 }
 
 .hero-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.hero-title { font-size: 18px; font-weight: 700; color: #FFFFFF; }
+.hero-title { font-size: 17px; font-weight: 700; color: #FFFFFF; }
 .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-.hero-stat-box { background: rgba(0, 0, 0, 0.45); border: 1px solid #243545; border-radius: 8px; padding: 12px 8px; text-align: center; }
+.hero-stat-box { background: rgba(0, 0, 0, 0.45); border: 1px solid #243545; border-radius: 8px; padding: 12px 6px; text-align: center; }
 .hero-stat-label { font-size: 11px; color: #93A5B5; text-transform: uppercase; letter-spacing: 0.5px; }
-.hero-stat-val { font-size: 26px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
+.hero-stat-val { font-size: 22px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
 
 /* Summary cards */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; margin-top: 8px; }
 .kpi { background: #15222E; border: 1px solid #243545; border-radius: 10px; padding: 16px 18px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
 .kpi-label { color: #93A5B5; font-size: 13px; font-weight: 600; }
@@ -201,7 +195,6 @@ tr.primary-row { background: rgba(43, 108, 176, 0.22); font-weight: 600; }
 @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
 
 @media (max-width: 820px) { 
-  .hardware-grid { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
@@ -221,17 +214,15 @@ def render_dashboard():
 
     # Banner
     st.markdown(
-        f'''
-        <div class="top-banner">
-            <div class="top-title">Smart Dustbin Live Fleet Monitoring</div>
-            <div class="top-sub"><span class="live-pulse"></span> Multi-Unit Cloud Feed &bull; Updated: {now_ist}</div>
-        </div>
-        ''',
+        f"""<div class="top-banner">
+<div class="top-title">Smart Dustbin Live Fleet Monitoring</div>
+<div class="top-sub"><span class="live-pulse"></span> Multi-Unit Cloud Feed &bull; Updated: {now_ist}</div>
+</div>""",
         unsafe_allow_html=True,
     )
 
-    # Helper to generate Hero Card for a hardware unit
-    def render_hardware_card(b, card_class=""):
+    # Function to build clean, un-indented HTML string for a hardware card
+    def build_card_html(b, card_class=""):
         p_label, p_color, _ = get_status_info(b["fill"])
         lid_display = b["lid"]
         lid_color = "#94A3B8"
@@ -243,44 +234,40 @@ def render_dashboard():
             lid_display = "Open Top"
             lid_color = "#94A3B8"
 
-        return f'''
-        <div class="hero-card {card_class}">
-            <div class="hero-header">
-                <div class="hero-title">⭐ {b["bin_id"]}: {b["location"]}</div>
-                <span class="badge badge-live"><span class="live-pulse"></span>HARDWARE</span>
-            </div>
-            <div style="margin: 8px 0;">
-                <span style="font-size: 13px; color: #C3D5E8; margin-right: 8px;">Fill Capacity:</span>
-                <span class="bar-bg" style="width: 55%; height: 12px;">
-                    <span class="bar-fill" style="display:block; width: {b["fill"]}%; background: {p_color};"></span>
-                </span>
-                <span style="font-size: 20px; font-weight: 800; color: {p_color};">{b["fill"]}%</span>
-            </div>
-            <div class="hero-stats">
-                <div class="hero-stat-box">
-                    <div class="hero-stat-label">Lid Status</div>
-                    <div class="hero-stat-val" style="color: {lid_color}; font-size: 20px; line-height: 1.4;">{lid_display}</div>
-                </div>
-                <div class="hero-stat-box">
-                    <div class="hero-stat-label">Depth</div>
-                    <div class="hero-stat-val" style="font-size: 20px; line-height: 1.4;">{b["dist"]} cm</div>
-                </div>
-                <div class="hero-stat-box">
-                    <div class="hero-stat-label">Health</div>
-                    <div class="hero-stat-val" style="color: {p_color}; font-size: 20px; line-height: 1.4;">{p_label}</div>
-                </div>
-            </div>
-        </div>
-        '''
+        return f"""<div class="hero-card {card_class}">
+<div class="hero-header">
+<div class="hero-title">⭐ {b['bin_id']}: {b['location']}</div>
+<span class="badge badge-live"><span class="live-pulse"></span>HARDWARE</span>
+</div>
+<div style="margin: 8px 0;">
+<span style="font-size: 13px; color: #C3D5E8; margin-right: 8px;">Fill Capacity:</span>
+<span class="bar-bg" style="width: 55%; height: 12px;">
+<span class="bar-fill" style="display:block; width: {b['fill']}%; background: {p_color};"></span>
+</span>
+<span style="font-size: 20px; font-weight: 800; color: {p_color};">{b['fill']}%</span>
+</div>
+<div class="hero-stats">
+<div class="hero-stat-box">
+<div class="hero-stat-label">Lid Status</div>
+<div class="hero-stat-val" style="color: {lid_color};">{lid_display}</div>
+</div>
+<div class="hero-stat-box">
+<div class="hero-stat-label">Depth</div>
+<div class="hero-stat-val">{b['dist']} cm</div>
+</div>
+<div class="hero-stat-box">
+<div class="hero-stat-label">Health</div>
+<div class="hero-stat-val" style="color: {p_color};">{p_label}</div>
+</div>
+</div>
+</div>"""
 
-    # Dual Hardware Display Grid
-    card1 = render_hardware_card(bin1)
-    card2 = render_hardware_card(bin2, "card-bin2")
-
-    st.markdown(
-        f'<div class="hardware-grid">{card1}{card2}</div>',
-        unsafe_allow_html=True,
-    )
+    # Side-by-side columns using native Streamlit columns (eliminates markdown indentation issues!)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(build_card_html(bin1), unsafe_allow_html=True)
+    with col2:
+        st.markdown(build_card_html(bin2, "card-bin2"), unsafe_allow_html=True)
 
     # Summary KPI Cards
     green_count = sum(1 for b in bins if b["fill"] < 50)
@@ -288,17 +275,18 @@ def render_dashboard():
     critical_count = sum(1 for b in bins if b["fill"] >= 80)
 
     def kpi_card(label, value, color):
-        return ('<div class="kpi">'
-                '<div class="kpi-label"><span class="dot" style="background:' + color + ';"></span>' + label + '</div>'
-                '<div class="kpi-value">' + str(value) + '</div></div>')
+        return f"""<div class="kpi">
+<div class="kpi-label"><span class="dot" style="background:{color};"></span>{label}</div>
+<div class="kpi-value">{value}</div>
+</div>"""
 
     st.markdown(
-        '<div class="kpi-row">'
-        + kpi_card("Total Fleet Bins", len(bins), "#5B9BD5")
-        + kpi_card("Normal (< 50%)", green_count, "#3DBE7A")
-        + kpi_card("Filling up (50-79%)", yellow_count, "#F0B429")
-        + kpi_card("Critical (>= 80%)", critical_count, "#F0605D")
-        + '</div>',
+        f"""<div class="kpi-row">
+{kpi_card("Total Fleet Bins", len(bins), "#5B9BD5")}
+{kpi_card("Normal (< 50%)", green_count, "#3DBE7A")}
+{kpi_card("Filling up (50-79%)", yellow_count, "#F0B429")}
+{kpi_card("Critical (>= 80%)", critical_count, "#F0605D")}
+</div>""",
         unsafe_allow_html=True,
     )
 
@@ -317,25 +305,22 @@ def render_dashboard():
         source_badge = '<span class="badge badge-live">HARDWARE</span>' if b.get("is_primary") else '<span class="badge badge-demo">DEMO</span>'
         row_class = 'class="primary-row"' if b.get("is_primary") else ''
 
-        rows_html += (
-            f'<tr {row_class}>'
-            f'<td><b>{b["bin_id"]}</b> {source_badge}</td>'
-            f'<td>{b["location"]}</td>'
-            f'<td><span class="bar-bg"><span class="bar-fill" style="display:block; width:{b["fill"]}%; background:{b_color};"></span></span>'
-            f'<span>{b["fill"]}%</span></td>'
-            f'<td><span class="badge {b_badge}">{b_label}</span></td>'
-            f'<td>{lid_badge}</td>'
-            f'</tr>'
-        )
+        rows_html += f"""<tr {row_class}>
+<td><b>{b['bin_id']}</b> {source_badge}</td>
+<td>{b['location']}</td>
+<td><span class="bar-bg"><span class="bar-fill" style="display:block; width:{b['fill']}%; background:{b_color};"></span></span><span>{b['fill']}%</span></td>
+<td><span class="badge {b_badge}">{b_label}</span></td>
+<td>{lid_badge}</td>
+</tr>"""
 
     st.markdown(
-        '<div class="table-wrap">'
-        '<div class="section-title">Campus Dustbin Fleet Status</div>'
-        '<table class="bins">'
-        '<tr><th>Bin ID</th><th>Location</th><th>Fill Level</th><th>Status</th><th>Lid State</th></tr>'
-        + rows_html +
-        '</table>'
-        '</div>',
+        f"""<div class="table-wrap">
+<div class="section-title">Campus Dustbin Fleet Status</div>
+<table class="bins">
+<tr><th>Bin ID</th><th>Location</th><th>Fill Level</th><th>Status</th><th>Lid State</th></tr>
+{rows_html}
+</table>
+</div>""",
         unsafe_allow_html=True,
     )
 
