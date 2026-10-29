@@ -1,7 +1,6 @@
 // ====================================================================
-// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE (V2 - ULTRA RESPONSIVE)
+// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE (BULLETPROOF V3)
 // Configuration: Fill Level Sensor ONLY (HC-SR04)
-// Anti-lockup HC-SR04 driver + Immediate distance change detection
 // ====================================================================
 
 #include <SoftwareSerial.h>
@@ -19,38 +18,33 @@ const int YELLOW_LED_PIN  = 7;
 const int RED_LED_PIN     = 8;
 
 // ==================== CALIBRATION (in cm) ====================
-// Empty distance: when bin has no trash (e.g., 30 cm)
-// Full distance: when trash is near top (e.g., 4 cm)
-const float EMPTY_DISTANCE_CM  = 30.0; 
+// Height of the dustbin:
+// Any distance >= 25 cm means the bin is EMPTY (0%)
+// Any distance <= 4 cm means the bin is FULL (100%)
+const float EMPTY_DISTANCE_CM  = 25.0; 
 const float FULL_DISTANCE_CM   = 4.0;  
 
-// Thresholds for status
+// Status thresholds (in %)
 const int YELLOW_START_PERCENT = 50;
 const int RED_START_PERCENT    = 80;
 
-int lastFillPercent = 0;
-int lastLevelDistance = 0;
+int currentFillPercent = 0;
+int currentDistanceCm  = 25;
 unsigned long lastTelemetryTime = 0;
 
-// Read distance with anti-lockup protection
+// Read distance from HC-SR04
 float readDistanceCm(int trigPin, int echoPin) {
-  pinMode(trigPin, OUTPUT);
   digitalWrite(trigPin, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  pinMode(echoPin, INPUT);
-  long duration = pulseIn(echoPin, HIGH, 35000); // 35ms timeout (~6m)
+  long duration = pulseIn(echoPin, HIGH, 30000); // 30ms timeout (~5m)
 
+  // If duration is 0, no object was detected within range (OPEN SPACE / EMPTY BIN)
   if (duration == 0) {
-    // HC-SR04 anti-hang reset
-    pinMode(echoPin, OUTPUT);
-    digitalWrite(echoPin, LOW);
-    delayMicroseconds(20);
-    pinMode(echoPin, INPUT);
-    return -1;
+    return 99.0; // Open space
   }
 
   return (duration * 0.0343 / 2.0);
@@ -105,33 +99,31 @@ void setup() {
   pinMode(YELLOW_LED_PIN, OUTPUT);
   pinMode(RED_LED_PIN, OUTPUT);
 
-  Serial.println(F("Dustbin 2 (BIN-002) Ready"));
-  delay(300);
+  Serial.println(F("Dustbin 2 Ready (Continuous Stream)"));
+  updateIndicators(0);
 }
 
 void loop() {
   float dist = readDistanceCm(LEVEL_TRIG_PIN, LEVEL_ECHO_PIN);
 
-  if (dist > 0 && dist <= 200) {
-    int currentDist = (int)dist;
-    int currentFill = distanceToFillPercent(dist);
-
-    // If DISTANCE changes by 2cm or more, or fill changes -> SEND IMMEDIATELY!
-    if (abs(currentDist - lastLevelDistance) >= 2 || currentFill != lastFillPercent) {
-      lastLevelDistance = currentDist;
-      lastFillPercent = currentFill;
-      updateIndicators(lastFillPercent);
-      sendTelemetry(lastFillPercent, lastLevelDistance);
-      lastTelemetryTime = millis();
-    }
+  // If open space / nothing in front, treat as empty (25cm)
+  if (dist > EMPTY_DISTANCE_CM) {
+    currentDistanceCm  = (int)EMPTY_DISTANCE_CM;
+    currentFillPercent = 0;
+  } else {
+    currentDistanceCm  = (int)dist;
+    currentFillPercent = distanceToFillPercent(dist);
   }
 
-  // Periodic heartbeat every 2 seconds
-  if (millis() - lastTelemetryTime >= 2000) {
-    updateIndicators(lastFillPercent);
-    sendTelemetry(lastFillPercent, lastLevelDistance);
-    lastTelemetryTime = millis();
+  // Always update LEDs
+  updateIndicators(currentFillPercent);
+
+  // Send telemetry continuously every 300ms so updates are INSTANT
+  unsigned long now = millis();
+  if (now - lastTelemetryTime >= 300) {
+    lastTelemetryTime = now;
+    sendTelemetry(currentFillPercent, currentDistanceCm);
   }
 
-  delay(100); // Fast 10Hz sampling
+  delay(60);
 }
