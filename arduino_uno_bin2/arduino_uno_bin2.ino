@@ -1,54 +1,68 @@
 // ====================================================================
-// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE
-// Configuration: Fill Level Sensor ONLY (HC-SR04), NO Servo, NO Proximity Sensor
+// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE (V2 - ULTRA RESPONSIVE)
+// Configuration: Fill Level Sensor ONLY (HC-SR04)
+// Anti-lockup HC-SR04 driver + Immediate distance change detection
 // ====================================================================
 
 #include <SoftwareSerial.h>
 
-// SoftwareSerial TX on Pin 10 -> Connected to ESP32 Pin 16 (RX2)
+// SoftwareSerial Pin 10 is TX -> Connects to ESP32 Pin 16 (RX2)
 SoftwareSerial espSerial(11, 10); // RX (Pin 11 unused), TX (Pin 10)
 
 // ==================== PIN CONFIGURATION ====================
-const int LEVEL_TRIG_PIN  = 4; // Trash fill-level sensor Trigger
-const int LEVEL_ECHO_PIN  = 5; // Trash fill-level sensor Echo
+const int LEVEL_TRIG_PIN  = 4; // Sensor Trigger
+const int LEVEL_ECHO_PIN  = 5; // Sensor Echo
 
-// Optional Status LEDs (if connected)
+// Status LEDs
 const int GREEN_LED_PIN   = 6;
 const int YELLOW_LED_PIN  = 7;
 const int RED_LED_PIN     = 8;
 
 // ==================== CALIBRATION (in cm) ====================
-// Adjust these to match the height of your second dustbin
-const float EMPTY_DISTANCE_CM  = 20.0; // Distance when bin is completely empty
-const float FULL_DISTANCE_CM   = 4.0;  // Distance when trash is near the top
+// Empty distance: when bin has no trash (e.g., 30 cm)
+// Full distance: when trash is near top (e.g., 4 cm)
+const float EMPTY_DISTANCE_CM  = 30.0; 
+const float FULL_DISTANCE_CM   = 4.0;  
 
-// Thresholds for alerts
+// Thresholds for status
 const int YELLOW_START_PERCENT = 50;
 const int RED_START_PERCENT    = 80;
 
 int lastFillPercent = 0;
-float lastLevelDistance = 0;
+int lastLevelDistance = 0;
 unsigned long lastTelemetryTime = 0;
 
-// Read distance from HC-SR04
+// Read distance with anti-lockup protection
 float readDistanceCm(int trigPin, int echoPin) {
+  pinMode(trigPin, OUTPUT);
   digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
+  delayMicroseconds(4);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 25000); // 25ms timeout (~4m max)
-  if (duration == 0) return -1;
+  pinMode(echoPin, INPUT);
+  long duration = pulseIn(echoPin, HIGH, 35000); // 35ms timeout (~6m)
+
+  if (duration == 0) {
+    // HC-SR04 anti-hang reset
+    pinMode(echoPin, OUTPUT);
+    digitalWrite(echoPin, LOW);
+    delayMicroseconds(20);
+    pinMode(echoPin, INPUT);
+    return -1;
+  }
+
   return (duration * 0.0343 / 2.0);
 }
 
 // Convert distance to fill percentage
 int distanceToFillPercent(float distanceCm) {
+  if (distanceCm >= EMPTY_DISTANCE_CM) return 0;
+  if (distanceCm <= FULL_DISTANCE_CM)  return 100;
+  
   float fill = ((EMPTY_DISTANCE_CM - distanceCm) / (EMPTY_DISTANCE_CM - FULL_DISTANCE_CM)) * 100.0;
-  if (fill < 0)   fill = 0;
-  if (fill > 100) fill = 100;
-  return (int)fill;
+  return (int)constrain(fill, 0, 100);
 }
 
 // Update Traffic LEDs
@@ -69,19 +83,14 @@ void updateIndicators(int fillPercent) {
 }
 
 // Send telemetry packet to ESP32 and USB Serial
-void sendTelemetry() {
+void sendTelemetry(int fill, int dist) {
   String statusStr = "NORMAL";
-  if (lastFillPercent >= RED_START_PERCENT) statusStr = "FULL";
-  else if (lastFillPercent >= YELLOW_START_PERCENT) statusStr = "HALF_FULL";
+  if (fill >= RED_START_PERCENT) statusStr = "FULL";
+  else if (fill >= YELLOW_START_PERCENT) statusStr = "HALF_FULL";
 
-  // Packet format: DATA,fill,dist,lid,status
-  // Lid is reported as "N/A" since Bin 2 has no servo
-  String packet = "DATA," + String(lastFillPercent) + "," + 
-                  String(lastLevelDistance > 0 ? (int)lastLevelDistance : 0) + "," + 
-                  "N/A," + 
-                  statusStr;
+  String packet = "DATA," + String(fill) + "," + String(dist) + ",N/A," + statusStr;
 
-  espSerial.println(packet); // Sent to ESP32 Pin 16
+  espSerial.println(packet); // Sent to ESP32 Pin 16 (RX2)
   Serial.println(packet);    // Sent to PC USB Serial
 }
 
@@ -96,33 +105,33 @@ void setup() {
   pinMode(YELLOW_LED_PIN, OUTPUT);
   pinMode(RED_LED_PIN, OUTPUT);
 
-  Serial.println(F("Dustbin 2 (BIN-002) Initialized - Sensor on Pins 4 & 5"));
-  delay(500);
+  Serial.println(F("Dustbin 2 (BIN-002) Ready"));
+  delay(300);
 }
 
 void loop() {
-  // Read ultrasonic level sensor
   float dist = readDistanceCm(LEVEL_TRIG_PIN, LEVEL_ECHO_PIN);
 
-  if (dist > 0 && dist <= 100) {
-    lastLevelDistance = dist;
+  if (dist > 0 && dist <= 200) {
+    int currentDist = (int)dist;
     int currentFill = distanceToFillPercent(dist);
 
-    // If fill level changed significantly, send telemetry immediately
-    if (abs(currentFill - lastFillPercent) >= 2) {
+    // If DISTANCE changes by 2cm or more, or fill changes -> SEND IMMEDIATELY!
+    if (abs(currentDist - lastLevelDistance) >= 2 || currentFill != lastFillPercent) {
+      lastLevelDistance = currentDist;
       lastFillPercent = currentFill;
       updateIndicators(lastFillPercent);
-      sendTelemetry();
+      sendTelemetry(lastFillPercent, lastLevelDistance);
       lastTelemetryTime = millis();
     }
   }
 
-  // Heartbeat telemetry every 2 seconds
+  // Periodic heartbeat every 2 seconds
   if (millis() - lastTelemetryTime >= 2000) {
     updateIndicators(lastFillPercent);
-    sendTelemetry();
+    sendTelemetry(lastFillPercent, lastLevelDistance);
     lastTelemetryTime = millis();
   }
 
-  delay(200); // 5Hz sampling rate
+  delay(100); // Fast 10Hz sampling
 }
