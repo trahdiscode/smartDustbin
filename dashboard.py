@@ -1,8 +1,10 @@
 # dashboard.py
-# Smart Dustbin IoT Monitoring Dashboard - Real-Time Streamlit App
-# Reads live hardware telemetry for BIN-001 from Firebase Realtime Database
-# Simulates 4 campus demo dustbins (BIN-002 to BIN-005)
-# Auto-refreshes every 1 second smoothly without page reloads using @st.fragment
+# Smart Dustbin IoT Monitoring Dashboard - Real-Time Multi-Bin System
+# Live Hardware:
+#   - BIN-001: Proximity Lid Actuator (Servo) + Fill Level Sensor
+#   - BIN-002: Fill Level Sensor (Ultrasonic) - Open Top
+# Campus Simulated:
+#   - BIN-003, BIN-004, BIN-005: Demo campus locations
 
 import random
 import threading
@@ -17,13 +19,12 @@ st.set_page_config(page_title="Smart Dustbin Live Monitoring", page_icon="🗑�
 # India Standard Time = UTC + 5:30
 IST = timezone(timedelta(hours=5, minutes=30))
 
-FIREBASE_URL = "https://parkos1-default-rtdb.firebaseio.com"
+FIREBASE_URL = "https://parkos1-default-rtdb.firebaseio.com/bins.json"
 
 # =====================================================================
-# 1. DATA SIMULATOR FOR CAMPUS BINS
+# 1. DEMO DATA SIMULATOR FOR CAMPUS BINS (BIN-003, BIN-004, BIN-005)
 # =====================================================================
 START_DEMO_BINS = [
-    {"bin_id": "BIN-002", "location": "Block A, Floor 1", "fill": 24, "dist": 16, "lid": "CLOSED"},
     {"bin_id": "BIN-003", "location": "Canteen Entrance", "fill": 82, "dist": 6,  "lid": "CLOSED"},
     {"bin_id": "BIN-004", "location": "Main Library",     "fill": 55, "dist": 11, "lid": "CLOSED"},
     {"bin_id": "BIN-005", "location": "Hostel Gate",      "fill": 89, "dist": 4,  "lid": "OPEN"},
@@ -53,34 +54,61 @@ def fetch_all_bins():
             sim["last_minute"] = this_minute
         demos = [dict(b) for b in sim["demo_bins"]]
 
-    # Fetch live hardware BIN-001 from Firebase
-    primary = {
+    # Default states for hardware units
+    bin1 = {
         "bin_id": "BIN-001",
-        "location": "Primary Hardware Unit",
+        "location": "Block A (Smart Lid + Level)",
         "fill": 0,
         "dist": 0,
         "lid": "CLOSED",
         "status": "NORMAL",
         "is_primary": True,
+        "has_servo": True,
+        "online": False
+    }
+
+    bin2 = {
+        "bin_id": "BIN-002",
+        "location": "Block B (Fill Level Sensor)",
+        "fill": 0,
+        "dist": 0,
+        "lid": "N/A",
+        "status": "NORMAL",
+        "is_primary": True,
+        "has_servo": False,
         "online": False
     }
 
     try:
-        r = requests.get(FIREBASE_URL + "/bins/BIN-001.json", timeout=1.0).json()
+        r = requests.get(FIREBASE_URL, timeout=1.2).json()
         if r and isinstance(r, dict):
-            primary["fill"] = int(r.get("fill", 0))
-            primary["dist"] = int(r.get("dist", 0))
-            primary["lid"] = str(r.get("lid", "CLOSED")).upper()
-            primary["status"] = str(r.get("status", "NORMAL")).upper()
-            primary["online"] = True
+            # Parse BIN-001
+            if "BIN-001" in r and isinstance(r["BIN-001"], dict):
+                d1 = r["BIN-001"]
+                bin1["fill"] = int(d1.get("fill", 0))
+                bin1["dist"] = int(d1.get("dist", 0))
+                bin1["lid"] = str(d1.get("lid", "CLOSED")).upper()
+                bin1["status"] = str(d1.get("status", "NORMAL")).upper()
+                bin1["online"] = True
+
+            # Parse BIN-002
+            if "BIN-002" in r and isinstance(r["BIN-002"], dict):
+                d2 = r["BIN-002"]
+                bin2["fill"] = int(d2.get("fill", 0))
+                bin2["dist"] = int(d2.get("dist", 0))
+                bin2["lid"] = str(d2.get("lid", "N/A")).upper()
+                bin2["status"] = str(d2.get("status", "NORMAL")).upper()
+                bin2["online"] = True
     except Exception:
         pass
 
     for d in demos:
         d["is_primary"] = False
+        d["has_servo"] = True
         d["online"] = True
+        d["status"] = "NORMAL"
 
-    return [primary] + demos
+    return [bin1, bin2] + demos
 
 # =====================================================================
 # 2. STATUS HELPERS
@@ -98,31 +126,42 @@ def get_status_info(fill):
 # =====================================================================
 st.markdown("""
 <style>
-.block-container { padding-top: 1.2rem; max-width: 1100px; }
+.block-container { padding-top: 1.2rem; max-width: 1150px; }
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stHeader"], [data-testid="stToolbar"] { display: none; }
 .stApp { background: #000000; color-scheme: dark; }
 
 /* Top banner */
-.top-banner { background: #174A78; border-radius: 10px; padding: 20px 26px; margin-bottom: 18px; }
+.top-banner { background: #174A78; border-radius: 10px; padding: 20px 26px; margin-bottom: 20px; }
 .top-title { color: #FFFFFF; font-size: 28px; font-weight: 700; line-height: 1.2; margin: 0; }
 .top-sub { color: #C3D5E8; font-size: 14px; margin: 4px 0 0 0; }
 
-/* Primary Hardware Hero Card */
+/* Multi-Hardware Grid */
+.hardware-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
 .hero-card {
     background: linear-gradient(145deg, #162B40, #0F1E2C);
     border: 2px solid #2B6CB0;
     border-radius: 12px;
-    padding: 22px 26px;
-    margin-bottom: 22px;
+    padding: 20px 22px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
-.hero-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.hero-title { font-size: 20px; font-weight: 700; color: #FFFFFF; }
-.hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 14px; }
-.hero-stat-box { background: rgba(0, 0, 0, 0.4); border: 1px solid #243545; border-radius: 8px; padding: 14px; text-align: center; }
-.hero-stat-label { font-size: 12px; color: #93A5B5; text-transform: uppercase; letter-spacing: 0.5px; }
-.hero-stat-val { font-size: 32px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
+.hero-card.card-bin2 {
+    border-color: #3182CE;
+    background: linear-gradient(145deg, #15273B, #0E1A26);
+}
+
+.hero-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.hero-title { font-size: 18px; font-weight: 700; color: #FFFFFF; }
+.hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.hero-stat-box { background: rgba(0, 0, 0, 0.45); border: 1px solid #243545; border-radius: 8px; padding: 12px 8px; text-align: center; }
+.hero-stat-label { font-size: 11px; color: #93A5B5; text-transform: uppercase; letter-spacing: 0.5px; }
+.hero-stat-val { font-size: 26px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
 
 /* Summary cards */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
@@ -141,16 +180,17 @@ table.bins tr:last-child td { border-bottom: none; }
 tr.primary-row { background: rgba(43, 108, 176, 0.22); font-weight: 600; }
 
 /* Fill bar */
-.bar-bg { display: inline-block; width: 140px; height: 10px; background: #2A3C4D; border-radius: 6px; overflow: hidden; vertical-align: middle; margin-right: 10px; }
+.bar-bg { display: inline-block; width: 130px; height: 10px; background: #2A3C4D; border-radius: 6px; overflow: hidden; vertical-align: middle; margin-right: 10px; }
 .bar-fill { height: 100%; border-radius: 6px; }
 
 /* Badges */
-.badge { display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 700; }
+.badge { display: inline-block; padding: 4px 11px; border-radius: 99px; font-size: 12px; font-weight: 700; }
 .badge-green  { background: #153A28; color: #6FDDA0; }
 .badge-yellow { background: #3E3314; color: #F5CD6A; }
 .badge-red    { background: #43191C; color: #FF9C98; }
 .badge-open   { background: #2E1B0D; color: #F6AD55; border: 1px solid #DD6B20; }
 .badge-closed { background: #162E4D; color: #63B3ED; }
+.badge-na     { background: #202937; color: #94A3B8; }
 .badge-live   { background: #064E3B; color: #34D399; border: 1px solid #059669; }
 .badge-demo   { background: #1F2937; color: #9CA3AF; }
 
@@ -160,9 +200,9 @@ tr.primary-row { background: rgba(43, 108, 176, 0.22); font-weight: 600; }
 }
 @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
 
-@media (max-width: 700px) { 
+@media (max-width: 820px) { 
+  .hardware-grid { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
-  .hero-stats { grid-template-columns: 1fr; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -174,7 +214,8 @@ tr.primary-row { background: rgba(43, 108, 176, 0.22); font-weight: 600; }
 @st.fragment(run_every=1)
 def render_dashboard():
     bins = fetch_all_bins()
-    primary = bins[0]
+    bin1 = bins[0]
+    bin2 = bins[1]
 
     now_ist = datetime.now(IST).strftime("%I:%M:%S %p IST")
 
@@ -182,47 +223,62 @@ def render_dashboard():
     st.markdown(
         f'''
         <div class="top-banner">
-            <div class="top-title">Smart Dustbin Live Monitoring</div>
-            <div class="top-sub"><span class="live-pulse"></span> Live Cloud Feed &bull; Updated: {now_ist}</div>
+            <div class="top-title">Smart Dustbin Live Fleet Monitoring</div>
+            <div class="top-sub"><span class="live-pulse"></span> Multi-Unit Cloud Feed &bull; Updated: {now_ist}</div>
         </div>
         ''',
         unsafe_allow_html=True,
     )
 
-    # Primary Hero Card
-    p_label, p_color, p_badge = get_status_info(primary["fill"])
-    p_lid_color = "#F6AD55" if primary["lid"] == "OPEN" else "#63B3ED"
-    
-    st.markdown(
-        f'''
-        <div class="hero-card">
+    # Helper to generate Hero Card for a hardware unit
+    def render_hardware_card(b, card_class=""):
+        p_label, p_color, _ = get_status_info(b["fill"])
+        lid_display = b["lid"]
+        lid_color = "#94A3B8"
+        if b["lid"] == "OPEN":
+            lid_color = "#F6AD55"
+        elif b["lid"] == "CLOSED":
+            lid_color = "#63B3ED"
+        elif b["lid"] == "N/A":
+            lid_display = "Open Top"
+            lid_color = "#94A3B8"
+
+        return f'''
+        <div class="hero-card {card_class}">
             <div class="hero-header">
-                <div class="hero-title">⭐ PRIMARY UNIT: {primary["bin_id"]} ({primary["location"]})</div>
-                <span class="badge badge-live"><span class="live-pulse"></span>REAL HARDWARE</span>
+                <div class="hero-title">⭐ {b["bin_id"]}: {b["location"]}</div>
+                <span class="badge badge-live"><span class="live-pulse"></span>HARDWARE</span>
             </div>
             <div style="margin: 8px 0;">
-                <span style="font-size: 14px; color: #C3D5E8; margin-right: 10px;">Fill Level Capacity:</span>
-                <span class="bar-bg" style="width: 60%; height: 14px;">
-                    <span class="bar-fill" style="display:block; width: {primary["fill"]}%; background: {p_color};"></span>
+                <span style="font-size: 13px; color: #C3D5E8; margin-right: 8px;">Fill Capacity:</span>
+                <span class="bar-bg" style="width: 55%; height: 12px;">
+                    <span class="bar-fill" style="display:block; width: {b["fill"]}%; background: {p_color};"></span>
                 </span>
-                <span style="font-size: 22px; font-weight: 800; color: {p_color};">{primary["fill"]}%</span>
+                <span style="font-size: 20px; font-weight: 800; color: {p_color};">{b["fill"]}%</span>
             </div>
             <div class="hero-stats">
                 <div class="hero-stat-box">
-                    <div class="hero-stat-label">Lid Position</div>
-                    <div class="hero-stat-val" style="color: {p_lid_color};">{primary["lid"]}</div>
+                    <div class="hero-stat-label">Lid Status</div>
+                    <div class="hero-stat-val" style="color: {lid_color}; font-size: 20px; line-height: 1.4;">{lid_display}</div>
                 </div>
                 <div class="hero-stat-box">
-                    <div class="hero-stat-label">Remaining Depth</div>
-                    <div class="hero-stat-val">{primary["dist"]} cm</div>
+                    <div class="hero-stat-label">Depth</div>
+                    <div class="hero-stat-val" style="font-size: 20px; line-height: 1.4;">{b["dist"]} cm</div>
                 </div>
                 <div class="hero-stat-box">
-                    <div class="hero-stat-label">Health Status</div>
-                    <div class="hero-stat-val" style="color: {p_color};">{p_label}</div>
+                    <div class="hero-stat-label">Health</div>
+                    <div class="hero-stat-val" style="color: {p_color}; font-size: 20px; line-height: 1.4;">{p_label}</div>
                 </div>
             </div>
         </div>
-        ''',
+        '''
+
+    # Dual Hardware Display Grid
+    card1 = render_hardware_card(bin1)
+    card2 = render_hardware_card(bin2, "card-bin2")
+
+    st.markdown(
+        f'<div class="hardware-grid">{card1}{card2}</div>',
         unsafe_allow_html=True,
     )
 
@@ -238,7 +294,7 @@ def render_dashboard():
 
     st.markdown(
         '<div class="kpi-row">'
-        + kpi_card("Total Campus Bins", len(bins), "#5B9BD5")
+        + kpi_card("Total Fleet Bins", len(bins), "#5B9BD5")
         + kpi_card("Normal (< 50%)", green_count, "#3DBE7A")
         + kpi_card("Filling up (50-79%)", yellow_count, "#F0B429")
         + kpi_card("Critical (>= 80%)", critical_count, "#F0605D")
@@ -250,7 +306,14 @@ def render_dashboard():
     rows_html = ""
     for b in bins:
         b_label, b_color, b_badge = get_status_info(b["fill"])
-        lid_badge = "badge-open" if b["lid"] == "OPEN" else "badge-closed"
+        
+        if b["lid"] == "OPEN":
+            lid_badge = '<span class="badge badge-open">Open</span>'
+        elif b["lid"] == "CLOSED":
+            lid_badge = '<span class="badge badge-closed">Closed</span>'
+        else:
+            lid_badge = '<span class="badge badge-na">Open Top</span>'
+
         source_badge = '<span class="badge badge-live">HARDWARE</span>' if b.get("is_primary") else '<span class="badge badge-demo">DEMO</span>'
         row_class = 'class="primary-row"' if b.get("is_primary") else ''
 
@@ -261,13 +324,13 @@ def render_dashboard():
             f'<td><span class="bar-bg"><span class="bar-fill" style="display:block; width:{b["fill"]}%; background:{b_color};"></span></span>'
             f'<span>{b["fill"]}%</span></td>'
             f'<td><span class="badge {b_badge}">{b_label}</span></td>'
-            f'<td><span class="badge {lid_badge}">{b["lid"].capitalize()}</span></td>'
+            f'<td>{lid_badge}</td>'
             f'</tr>'
         )
 
     st.markdown(
         '<div class="table-wrap">'
-        '<div class="section-title">Campus Dustbin Fleet Status (Live)</div>'
+        '<div class="section-title">Campus Dustbin Fleet Status</div>'
         '<table class="bins">'
         '<tr><th>Bin ID</th><th>Location</th><th>Fill Level</th><th>Status</th><th>Lid State</th></tr>'
         + rows_html +
