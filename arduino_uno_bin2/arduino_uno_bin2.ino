@@ -1,5 +1,6 @@
 // ====================================================================
-// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE (PERFECT V4)
+// SMART DUSTBIN 2 (BIN-002) - ARDUINO UNO FIRMWARE
+// LED Pins configured for: 7 (Green), 8 (Yellow), 9 (Red)
 // ====================================================================
 
 #include <SoftwareSerial.h>
@@ -12,10 +13,10 @@ SoftwareSerial espSerial(11, 10); // RX (Pin 11 unused), TX (Pin 10)
 const int LEVEL_TRIG_PIN  = 4; // Sensor Trigger -> Pin 4
 const int LEVEL_ECHO_PIN  = 5; // Sensor Echo    -> Pin 5
 
-// Status LEDs (Pins 6, 7, 8)
-const int GREEN_LED_PIN   = 6; // Green LED  -> Pin 6
-const int YELLOW_LED_PIN  = 7; // Yellow LED -> Pin 7
-const int RED_LED_PIN     = 8; // Red LED    -> Pin 8
+// Status LEDs (Pins 7, 8, 9)
+const int GREEN_LED_PIN   = 7; // Green LED  -> Pin 7
+const int YELLOW_LED_PIN  = 8; // Yellow LED -> Pin 8
+const int RED_LED_PIN     = 9; // Red LED    -> Pin 9
 
 // ==================== CALIBRATION (in cm) ====================
 const float EMPTY_DISTANCE_CM  = 30.0; // >= 30 cm = Empty (0%)
@@ -93,11 +94,10 @@ void loop() {
   float dist = readDistanceCm(LEVEL_TRIG_PIN, LEVEL_ECHO_PIN);
 
   if (dist > 0 && dist < 200) {
-    currentDistanceCm  = (int)dist; // Actual real distance in cm!
+    currentDistanceCm  = (int)dist;
     currentFillPercent = distanceToFillPercent(dist);
   } else {
-    // If open room / no echo
-    currentDistanceCm  = 30;
+    currentDistanceCm  = 30; // Empty
     currentFillPercent = 0;
   }
 
