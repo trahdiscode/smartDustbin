@@ -5,6 +5,11 @@
 #   - BIN-002: Fill Level Sensor (Ultrasonic) - Open Top
 # Campus Simulated:
 #   - BIN-003, BIN-004, BIN-005: Demo campus locations
+# Calibration:
+#   - Height: 16 cm
+#   - Green (< 50% / distance 8 to 16 cm / fillness 0 to 8 cm)
+#   - Orange (50% to 74% / distance 4 to 8 cm / fillness 8 to 12 cm)
+#   - Red (>= 75% / distance < 4 cm / fillness 12 to 16 cm)
 
 import random
 import threading
@@ -25,9 +30,9 @@ FIREBASE_URL = "https://parkos1-default-rtdb.firebaseio.com/bins.json"
 # 1. DEMO DATA SIMULATOR FOR CAMPUS BINS (BIN-003, BIN-004, BIN-005)
 # =====================================================================
 START_DEMO_BINS = [
-    {"bin_id": "BIN-003", "location": "Canteen Entrance", "fill": 82, "dist": 6,  "lid": "CLOSED"},
-    {"bin_id": "BIN-004", "location": "Main Library",     "fill": 55, "dist": 11, "lid": "CLOSED"},
-    {"bin_id": "BIN-005", "location": "Hostel Gate",      "fill": 89, "dist": 4,  "lid": "OPEN"},
+    {"bin_id": "BIN-003", "location": "Canteen Entrance", "fill": 78, "dist": 4,  "lid": "CLOSED"},
+    {"bin_id": "BIN-004", "location": "Main Library",     "fill": 56, "dist": 7,  "lid": "CLOSED"},
+    {"bin_id": "BIN-005", "location": "Hostel Gate",      "fill": 88, "dist": 2,  "lid": "OPEN"},
 ]
 
 @st.cache_resource
@@ -54,12 +59,12 @@ def fetch_all_bins():
             sim["last_minute"] = this_minute
         demos = [dict(b) for b in sim["demo_bins"]]
 
-    # Default states for hardware units
+    # Default states for hardware units (16 cm height calibration)
     bin1 = {
         "bin_id": "BIN-001",
         "location": "Block A (Smart Lid + Level)",
         "fill": 0,
-        "dist": 0,
+        "dist": 16,
         "lid": "CLOSED",
         "status": "NORMAL",
         "is_primary": True,
@@ -71,7 +76,7 @@ def fetch_all_bins():
         "bin_id": "BIN-002",
         "location": "Block B (Fill Level Sensor)",
         "fill": 0,
-        "dist": 0,
+        "dist": 16,
         "lid": "N/A",
         "status": "NORMAL",
         "is_primary": True,
@@ -86,7 +91,7 @@ def fetch_all_bins():
             if "BIN-001" in r and isinstance(r["BIN-001"], dict):
                 d1 = r["BIN-001"]
                 bin1["fill"] = int(d1.get("fill", 0))
-                bin1["dist"] = int(d1.get("dist", 0))
+                bin1["dist"] = int(d1.get("dist", 16))
                 bin1["lid"] = str(d1.get("lid", "CLOSED")).upper()
                 bin1["status"] = str(d1.get("status", "NORMAL")).upper()
                 bin1["online"] = True
@@ -95,7 +100,7 @@ def fetch_all_bins():
             if "BIN-002" in r and isinstance(r["BIN-002"], dict):
                 d2 = r["BIN-002"]
                 bin2["fill"] = int(d2.get("fill", 0))
-                bin2["dist"] = int(d2.get("dist", 0))
+                bin2["dist"] = int(d2.get("dist", 16))
                 bin2["lid"] = str(d2.get("lid", "N/A")).upper()
                 bin2["status"] = str(d2.get("status", "NORMAL")).upper()
                 bin2["online"] = True
@@ -111,13 +116,13 @@ def fetch_all_bins():
     return [bin1, bin2] + demos
 
 # =====================================================================
-# 2. STATUS HELPERS
+# 2. STATUS HELPERS (16 cm Bin: <50% Normal, 50-74% Orange, >=75% Red)
 # =====================================================================
 def get_status_info(fill):
     if fill < 50:
         return "Normal", "#3DBE7A", "badge-green"
-    elif fill < 80:
-        return "Filling up", "#F0B429", "badge-yellow"
+    elif fill < 75:
+        return "Filling up", "#F59E0B", "badge-yellow"
     else:
         return "Critical", "#F0605D", "badge-red"
 
@@ -152,10 +157,10 @@ st.markdown("""
 
 .hero-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .hero-title { font-size: 17px; font-weight: 700; color: #FFFFFF; }
-.hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-.hero-stat-box { background: rgba(0, 0, 0, 0.45); border: 1px solid #243545; border-radius: 8px; padding: 12px 6px; text-align: center; }
-.hero-stat-label { font-size: 11px; color: #93A5B5; text-transform: uppercase; letter-spacing: 0.5px; }
-.hero-stat-val { font-size: 22px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
+.hero-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 14px; }
+.hero-stat-box { background: rgba(0, 0, 0, 0.45); border: 1px solid #243545; border-radius: 8px; padding: 14px 10px; text-align: center; }
+.hero-stat-label { font-size: 12px; color: #93A5B5; text-transform: uppercase; letter-spacing: 0.5px; }
+.hero-stat-val { font-size: 24px; font-weight: 800; color: #FFFFFF; margin-top: 4px; }
 
 /* Summary cards */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; margin-top: 8px; }
@@ -221,7 +226,7 @@ def render_dashboard():
         unsafe_allow_html=True,
     )
 
-    # Function to build clean, un-indented HTML string for a hardware card
+    # Function to build clean, un-indented HTML string for a hardware card (without Health section)
     def build_card_html(b, card_class=""):
         p_label, p_color, _ = get_status_info(b["fill"])
         lid_display = b["lid"]
@@ -248,31 +253,27 @@ def render_dashboard():
 </div>
 <div class="hero-stats">
 <div class="hero-stat-box">
-<div class="hero-stat-label">Lid Status</div>
+<div class="hero-stat-label">Lid Position</div>
 <div class="hero-stat-val" style="color: {lid_color};">{lid_display}</div>
 </div>
 <div class="hero-stat-box">
-<div class="hero-stat-label">Depth</div>
+<div class="hero-stat-label">Remaining Depth</div>
 <div class="hero-stat-val">{b['dist']} cm</div>
-</div>
-<div class="hero-stat-box">
-<div class="hero-stat-label">Health</div>
-<div class="hero-stat-val" style="color: {p_color};">{p_label}</div>
 </div>
 </div>
 </div>"""
 
-    # Side-by-side columns using native Streamlit columns (eliminates markdown indentation issues!)
+    # Side-by-side columns using native Streamlit columns
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(build_card_html(bin1), unsafe_allow_html=True)
     with col2:
         st.markdown(build_card_html(bin2, "card-bin2"), unsafe_allow_html=True)
 
-    # Summary KPI Cards
+    # Summary KPI Cards (16 cm calibration thresholds: <50%, 50-74%, >=75%)
     green_count = sum(1 for b in bins if b["fill"] < 50)
-    yellow_count = sum(1 for b in bins if 50 <= b["fill"] < 80)
-    critical_count = sum(1 for b in bins if b["fill"] >= 80)
+    yellow_count = sum(1 for b in bins if 50 <= b["fill"] < 75)
+    critical_count = sum(1 for b in bins if b["fill"] >= 75)
 
     def kpi_card(label, value, color):
         return f"""<div class="kpi">
@@ -284,8 +285,8 @@ def render_dashboard():
         f"""<div class="kpi-row">
 {kpi_card("Total Fleet Bins", len(bins), "#5B9BD5")}
 {kpi_card("Normal (< 50%)", green_count, "#3DBE7A")}
-{kpi_card("Filling up (50-79%)", yellow_count, "#F0B429")}
-{kpi_card("Critical (>= 80%)", critical_count, "#F0605D")}
+{kpi_card("Filling up (50-74%)", yellow_count, "#F59E0B")}
+{kpi_card("Critical (>= 75%)", critical_count, "#F0605D")}
 </div>""",
         unsafe_allow_html=True,
     )

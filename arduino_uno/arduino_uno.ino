@@ -25,18 +25,17 @@ const int LID_CLOSED_ANGLE     = 10; // Relaxes bottom end-stop
 const int LID_OPEN_ANGLE       = 80; // Relaxes top hinge limit (prevents shaking)
 const int LID_OPEN_TIME_MS     = 3000;
 
-// Fill-level calibration (in cm)
-const float EMPTY_DISTANCE_CM  = 20.0;
-const float FULL_DISTANCE_CM   = 4.0;
+// Fill-level calibration (16 cm height)
+const float DUSTBIN_HEIGHT_CM  = 16.0;
 
 // Fill thresholds (in %)
-const int YELLOW_START_PERCENT = 50;
-const int RED_START_PERCENT    = 80;
+const int YELLOW_START_PERCENT = 50; // 8 cm trash fillness (distance <= 8 cm)
+const int RED_START_PERCENT    = 75; // 12 cm trash fillness (distance <= 4 cm)
 
 Servo lidServo;
 
 int lastFillPercent = 0;
-float lastLevelDistance = 0;
+float lastLevelDistance = 16.0;
 String lidState = "CLOSED";
 
 // ======================================================
@@ -55,13 +54,14 @@ float readDistanceCm(int trigPin, int echoPin) {
 }
 
 // ======================================================
-// CONVERT DISTANCE TO FILL PERCENTAGE
+// CONVERT DISTANCE TO FILL PERCENTAGE (16 cm Dustbin)
 // ======================================================
 int distanceToFillPercent(float distanceCm) {
-  float fill = ((EMPTY_DISTANCE_CM - distanceCm) / (EMPTY_DISTANCE_CM - FULL_DISTANCE_CM)) * 100.0;
-  if (fill < 0)   fill = 0;
-  if (fill > 100) fill = 100;
-  return (int)fill;
+  if (distanceCm >= DUSTBIN_HEIGHT_CM) return 0;
+  if (distanceCm <= 0) return 100;
+  
+  float fill = ((DUSTBIN_HEIGHT_CM - distanceCm) / DUSTBIN_HEIGHT_CM) * 100.0;
+  return (int)constrain(fill, 0, 100);
 }
 
 // ======================================================
@@ -69,14 +69,17 @@ int distanceToFillPercent(float distanceCm) {
 // ======================================================
 void updateIndicators(int fillPercent) {
   if (fillPercent >= RED_START_PERCENT) {
+    // Fill >= 75% (Trash 12 to 16 cm): RED LED
     digitalWrite(GREEN_LED_PIN, LOW);
     digitalWrite(YELLOW_LED_PIN, LOW);
     digitalWrite(RED_LED_PIN, HIGH);
   } else if (fillPercent >= YELLOW_START_PERCENT) {
+    // Fill 50% to 74% (Trash 8 to 12 cm): ORANGE/YELLOW LED
     digitalWrite(GREEN_LED_PIN, LOW);
     digitalWrite(YELLOW_LED_PIN, HIGH);
     digitalWrite(RED_LED_PIN, LOW);
   } else {
+    // Fill < 50% (Trash 0 to 8 cm): GREEN LED
     digitalWrite(GREEN_LED_PIN, HIGH);
     digitalWrite(YELLOW_LED_PIN, LOW);
     digitalWrite(RED_LED_PIN, LOW);
@@ -92,7 +95,7 @@ void sendTelemetry() {
   else if (lastFillPercent >= YELLOW_START_PERCENT) statusStr = "HALF_FULL";
 
   String packet = "DATA," + String(lastFillPercent) + "," + 
-                  String(lastLevelDistance > 0 ? (int)lastLevelDistance : 0) + "," + 
+                  String(lastLevelDistance > 0 ? (int)lastLevelDistance : 16) + "," + 
                   lidState + "," + 
                   statusStr;
 
@@ -101,50 +104,49 @@ void sendTelemetry() {
 }
 
 // ======================================================
-// SMOOTH, JITTER-FREE LID MOTION
+// SMOOTH SERVO MOTION (PREVENTS JITTER & POWER DIPS)
 // ======================================================
-void openLidThenClose() {
-  // 1. Immediately report OPEN to dashboard
-  lidState = "OPEN";
-  sendTelemetry();
-  Serial.println("Lid: OPENING");
-
-  // Attach and sweep smoothly open
+void smoothMove(int fromAngle, int toAngle, int stepDelayMs) {
   lidServo.attach(SERVO_PIN);
-  for (int pos = LID_CLOSED_ANGLE; pos <= LID_OPEN_ANGLE; pos += 2) {
-    lidServo.write(pos);
-    delay(15);
+  if (fromAngle < toAngle) {
+    for (int pos = fromAngle; pos <= toAngle; pos++) {
+      lidServo.write(pos);
+      delay(stepDelayMs);
+    }
+  } else {
+    for (int pos = fromAngle; pos >= toAngle; pos--) {
+      lidServo.write(pos);
+      delay(stepDelayMs);
+    }
   }
-
-  // DETACH AT TOP: Kills all buzzing and shaking while waiting open!
-  lidServo.detach();
-
-  // Hold open for 3 seconds while continuously reporting OPEN
-  for (int i = 0; i < 6; i++) {
-    delay(500);
-    sendTelemetry();
-  }
-
-  // 2. Re-attach to sweep smoothly closed
-  lidServo.attach(SERVO_PIN);
-  Serial.println("Lid: CLOSING");
-  for (int pos = LID_OPEN_ANGLE; pos >= LID_CLOSED_ANGLE; pos -= 2) {
-    lidServo.write(pos);
-    delay(15);
-  }
-  delay(200);
-
-  // DETACH AT BOTTOM: Kills all buzzing and shaking while closed!
-  lidServo.detach();
-
-  // 3. Immediately report CLOSED to dashboard
-  lidState = "CLOSED";
-  sendTelemetry();
 }
 
 // ======================================================
-// SETUP
+// OPEN AND CLOSE CYCLE
 // ======================================================
+void openLidThenClose() {
+  lidState = "OPEN";
+  sendTelemetry(); // Push "OPEN" immediately to cloud!
+
+  // Smooth open from 10 deg to 80 deg
+  smoothMove(LID_CLOSED_ANGLE, LID_OPEN_ANGLE, 12);
+  lidServo.detach(); // Relax motor in open position
+
+  // Hold open for 3 seconds, keeping cloud updated
+  unsigned long startHold = millis();
+  while (millis() - startHold < LID_OPEN_TIME_MS) {
+    sendTelemetry();
+    delay(200);
+  }
+
+  // Smooth close from 80 deg back to 10 deg
+  smoothMove(LID_OPEN_ANGLE, LID_CLOSED_ANGLE, 15);
+  lidServo.detach(); // Relax motor in closed position
+
+  lidState = "CLOSED";
+  sendTelemetry(); // Push "CLOSED" immediately to cloud!
+}
+
 void setup() {
   Serial.begin(9600);
   espSerial.begin(9600);
@@ -170,7 +172,7 @@ void setup() {
 
   sendTelemetry();
   Serial.println(F("================================="));
-  Serial.println(F("   SMART DUSTBIN STABILIZED"));
+  Serial.println(F("   SMART DUSTBIN 1 INITIALIZED   "));
   Serial.println(F("================================="));
 }
 
@@ -184,18 +186,21 @@ void loop() {
   float levelDistance  = readDistanceCm(LEVEL_TRIG_PIN, LEVEL_ECHO_PIN);
 
   // 2. DECIDE: Measure trash fill level ONLY when lid is resting CLOSED
-  if (lidState == "CLOSED" && levelDistance > 0 && levelDistance < 100) {
+  if (lidState == "CLOSED" && levelDistance > 1 && levelDistance <= 50) {
     lastLevelDistance = levelDistance;
     lastFillPercent   = distanceToFillPercent(levelDistance);
+  } else if (levelDistance > 50 || levelDistance < 0) {
+    lastLevelDistance = 16.0;
+    lastFillPercent   = 0;
   }
 
   // 3. ACT: Update status LEDs
   updateIndicators(lastFillPercent);
 
-  // 4. PERIODIC TELEMETRY: Keep dashboard refreshed every 200ms
+  // 4. PERIODIC TELEMETRY: Keep dashboard refreshed
   sendTelemetry();
 
-  // 5. LID TRIGGER (Hand detected with noise confirmation)
+  // 5. LID TRIGGER (Hand detected)
   if (objectDistance > 0 && objectDistance <= HAND_DETECT_CM) {
     delay(40);
     float confirmDist = readDistanceCm(OBJECT_TRIG_PIN, OBJECT_ECHO_PIN);
